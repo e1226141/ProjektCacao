@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<!-- saved from url=(0040)file:///C:/development/Projekt/test.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>Network | Basic usage</title>
+  <script type="text/javascript" src="./c_files/jquery-3.2.0.min.js.Download"></script>
+  <script type="text/javascript" src="./c_files/vis.js.Download"></script>
+  <link href="./c_files/vis.css" rel="stylesheet" type="text/css">
+
+  <style type="text/css">
+    #mynetwork {
+      width: 1920px;
+      height: 1024px;
+      border: 1px solid lightgray;
+    }
+  </style>
+</head>
+<body>
+Stabilize when clustering:<input type="checkbox" id="stabilizeCheckbox">
+
+<div id="mynetwork"><div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;"><canvas width="2880" height="1536" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;"></canvas></div></div>
+
+<script type="text/javascript">
+
+    /**
+     * start chrome with '--allow-file-access-from-files' for loading external local files!
+     */
+    // helper method to load local JSON file
+    function loadLocalJSON(callback, fileName) {
+        var xobj = new XMLHttpRequest();
+        xobj.overrideMimeType("application/json");
+        xobj.open('GET', fileName, true);
+        xobj.onreadystatechange = function() {
+            if (xobj.readyState == 4) {
+                callback(xobj.responseText);
+            }
+        }
+        xobj.send(null);
+    }
+
+    var jsonData = null;
+    loadLocalJSON(function(response) {
+        jsonData= JSON.parse(response);
+        initialize();
+    }, "./xyz.json");
+
+    function initialize() {
+        // create an array with nodes
+        var nodeData = jsonData.passes[4].nodes;
+        var edgeData = jsonData.passes[4].edges;
+
+        // create labels
+        $.each(nodeData, function (index, node) {
+            node.label = "[" + node.id + "]: " + node.name;
+            if (node.BB) {
+                node.group = node.BB;
+            }
+        });
+
+        // format edges
+        $.each(edgeData, function (index, edge) {
+            if (edge.type == 'bb') {
+                edge.dashes = true;
+            // set label true/false for if branches
+            } else if (edge.type == 'cfg' && typeof edge.trueBranch != 'undefined') {
+                edge.label = edge.trueBranch;
+            }
+        });
+
+        // returns the root element
+        function findRoot(nodes) {
+            for(var i=0;i<nodes.length;i++) {
+                if(nodes[i].root) {
+                    return nodes[i];
+                }
+            }
+            return null;
+        }
+
+        function findNodeById(nodes, id) {
+            for (var i=0; i<nodes.length; i++) {
+                if (nodes[i].id == id) {
+                    return nodes[i];
+                }
+            }
+            return null;
+        }
+
+        function findEdges(node, edges) {
+            return edges.filter(function (edge) { return edge.from == node.id});
+        }
+
+        var maxLevel = 0;
+        function setHierarchy(node, level) {
+            if (node.level != null) {
+                return;
+            }
+            if (level > maxLevel) {
+                maxLevel = level;
+            }
+            console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
+            node.level = level;
+            var cfgEdges = findEdges(node, edgeData).filter(isCfgEdge);
+            for (var i=0; i<cfgEdges.length; i++) {
+                var childNode = findNodeById(nodeData, cfgEdges[i].to);
+                setHierarchy(childNode, level + 1);
+            }
+        }
+
+        var root = findRoot(nodeData);
+        setHierarchy(root, 0);
+        // set all other levels to max + 1;
+        nodeData
+            .filter(function (node) {return typeof node.level == 'undefined'})
+            .forEach(function(node) {node.level = maxLevel + 1;});
+
+        function isCfgNode(node) {
+            return $.inArray(node.name, ["BeginInst", "GOTOInst", "RETURNInst", "IFInst"]) != -1;
+        }
+
+        function isCfgEdge(edge) {
+            return $.inArray(edge.type, ["cfg", "bb"]) != -1;
+        }
+
+        // filter nodes and edges for control flow
+        var nodes = new vis.DataSet(nodeData.filter(isCfgNode));
+        var edges = new vis.DataSet(edgeData.filter(isCfgEdge));
+
+        // TODO: evaluate => showing edge labels only on hover => https://jsfiddle.net/8xrcbg0k/2/
+        // overlay request => https://github.com/almende/vis/issues/2139/
+        // TODO: select groups of nodes with right mouse => https://github.com/almende/vis/issues/977
+        // TODO: drawing on canvas => http://visjs.org/examples/network/events/renderEvents.html
+        //       convex shape => http://jsfiddle.net/rLf78a6x/8/
+        //       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/   
+
+        // create a network
+        var container = document.getElementById('mynetwork');
+        var data = {
+            nodes: nodes,
+            edges: edges,
+        };
+        var options = {
+            nodes: {
+                shape: "box",
+            },
+            edges: {
+                arrows: {
+                    to: {
+                        enabled: true
+                    }
+                },
+                smooth: {
+                    enabled: true,
+                    type: 'continuous'
+                }
+            },
+            layout: {
+                randomSeed: undefined,
+                improvedLayout: true,
+                hierarchical: {
+                    enabled: true,
+                    levelSeparation: 150,
+                    nodeSpacing: 300,
+                    treeSpacing: 150,
+                    blockShifting: true,
+                    edgeMinimization: true,
+                    parentCentralization: true,
+                    direction: 'UD',        // UD, DU, LR, RL
+                    sortMethod: 'directed'   // hubsize, directed
+                }
+            },
+            physics: {
+                enabled: false
+            }
+        }
+        var network = new vis.Network(container, data, options);
+
+        // set the first initial zoom level
+        /*network.once('initRedraw', function() {
+            if (lastClusterZoomLevel === 0) {
+                lastClusterZoomLevel = network.getScale();
+            }
+        });
+
+        // cluster on zoom => http://visjs.org/examples/network/other/clusteringByZoom.html
+        var clusterIndex = 0;
+        var clusters = [];
+        var lastClusterZoomLevel = 0;
+        var clusterFactor = 0.5;
+
+        // we use the zoom event for our clustering
+        network.on('zoom', function (params) {
+            if (params.direction == '-') {
+                if (params.scale < lastClusterZoomLevel*clusterFactor) {
+                    makeClusters(params.scale);
+                    lastClusterZoomLevel = params.scale;
+                }
+            }
+            else {
+                openClusters(params.scale);
+            }
+        });
+
+        // cluster by basic blocks
+        // if we click on a node, we want to open it up!
+        network.on("selectNode", function (params) {
+            if (params.nodes.length == 1) {
+                if (network.isCluster(params.nodes[0]) == true) {
+                    network.openCluster(params.nodes[0])
+                }
+            }
+        });
+
+        // make the clusters
+        function makeClusters(scale) {
+            var clusterOptionsByData = {
+                processProperties: function (clusterOptions, childNodes) {
+                    clusterIndex = clusterIndex + 1;
+                    var childrenCount = 0;
+                    for (var i = 0; i < childNodes.length; i++) {
+                        childrenCount += childNodes[i].childrenCount || 1;
+                    }
+                    clusterOptions.childrenCount = childrenCount;
+                    clusterOptions.label = "# " + childrenCount + "";
+                    clusterOptions.font = {size: childrenCount*5+30}
+                    clusterOptions.id = 'cluster:' + clusterIndex;
+                    clusters.push({id:'cluster:' + clusterIndex, scale:scale});
+                    return clusterOptions;
+                },
+                clusterNodeProperties: {borderWidth: 3, shape: 'database', font: {size: 30}}
+            }
+            network.clusterOutliers(clusterOptionsByData);
+            if (document.getElementById('stabilizeCheckbox').checked === true) {
+                // since we use the scale as a unique identifier, we do NOT want to fit after the stabilization
+                network.setOptions({physics:{stabilization:{fit: false}}});
+                network.stabilize();
+            }
+        }
+
+        // open them back up!
+        function openClusters(scale) {
+            var newClusters = [];
+            var declustered = false;
+            for (var i = 0; i < clusters.length; i++) {
+                if (clusters[i].scale < scale) {
+                    network.openCluster(clusters[i].id);
+                    lastClusterZoomLevel = scale;
+                    declustered = true;
+                }
+                else {
+                    newClusters.push(clusters[i])
+                }
+            }
+            clusters = newClusters;
+            if (declustered === true && document.getElementById('stabilizeCheckbox').checked === true) {
+                // since we use the scale as a unique identifier, we do NOT want to fit after the stabilization
+                network.setOptions({physics:{stabilization:{fit: false}}});
+                network.stabilize();
+            }
+        }*/
+    }
+</script>
+
+</body></html>
