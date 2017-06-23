@@ -2,9 +2,15 @@
 <!-- saved from url=(0040)file:///C:/development/Projekt/test.html -->
 <html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <title>Network | Basic usage</title>
-  <script type="text/javascript" src="./c_files/jquery-3.2.0.min.js.Download"></script>
-  <script type="text/javascript" src="./c_files/vis.js.Download"></script>
-  <link href="./c_files/vis.css" rel="stylesheet" type="text/css">
+  <script type="text/javascript" src="./lib/js/jquery-3.2.0.min.js"></script>
+  <script type="text/javascript" src="./lib/js/jquery.layout.js"></script>  
+  <script type="text/javascript" src="./lib/js/vis.js"></script>    
+  <script type="text/javascript" src="./lib/js/jquery-ui.min.css"></script>
+  <link rel="stylesheet" type="text/css" href="./lib/css/vis.css">
+  <link rel="stylesheet" type="text/css" href="./lib/css/layout-default-latest.css">
+  <link rel="stylesheet" type="text/css" href="./lib/css/jquery-ui.min.css">
+  <link rel="stylesheet" type="text/css" href="./lib/css/jquery-ui.structure.min.css">
+  <link rel="stylesheet" type="text/css" href="./lib/css/jquery-ui.theme.min.css">    
 
   <style type="text/css">
     #mynetwork {
@@ -15,15 +21,34 @@
   </style>
 </head>
 <body>
-Stabilize when clustering:<input type="checkbox" id="stabilizeCheckbox">
 
-<div id="mynetwork"><div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;"><canvas width="2880" height="1536" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;"></canvas></div></div>
+<div class="ui-layout-center">Center
+	<div id="mynetwork">
+		<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
+			<canvas width="1920" height="1024" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
+			</canvas>
+		</div>
+	</div>
+</div>
+<div class="ui-layout-north">North</div>
+<div class="ui-layout-south">South</div>
+<div class="ui-layout-east">East</div>
+<div class="ui-layout-west">
+	<div id="passList"></div>
+</div>
+
+</body>
 
 <script type="text/javascript">
 
     /**
      * start chrome with '--allow-file-access-from-files' for loading external local files!
      */
+	 
+	$(document).ready(function () {
+		$('body').layout();
+	});
+
     // helper method to load local JSON file
     function loadLocalJSON(callback, fileName) {
         var xobj = new XMLHttpRequest();
@@ -43,7 +68,24 @@ Stabilize when clustering:<input type="checkbox" id="stabilizeCheckbox">
         initialize();
     }, "./xyz.json");
 
+	function getPassNames() {
+		var names = [];		
+	    for (var pass of jsonData.passes) {			
+			names.push(pass.name);
+		}
+		return names;		
+	}
+	
+	function initPassList(passes) {		
+		var passList = $('#passList');
+		for (var pass of jsonData.passes) {			
+			passList.append(pass.name + "</br>"); 
+		}			
+	}
+	
     function initialize() {
+		initPassList();
+		
         // create an array with nodes
         var nodeData = jsonData.passes[4].nodes;
         var edgeData = jsonData.passes[4].edges;
@@ -158,9 +200,9 @@ Stabilize when clustering:<input type="checkbox" id="stabilizeCheckbox">
                 improvedLayout: true,
                 hierarchical: {
                     enabled: true,
-                    levelSeparation: 150,
-                    nodeSpacing: 300,
-                    treeSpacing: 150,
+                    levelSeparation: 100,
+                    nodeSpacing: 450,
+                    treeSpacing: 100,
                     blockShifting: true,
                     edgeMinimization: true,
                     parentCentralization: true,
@@ -260,4 +302,4 @@ Stabilize when clustering:<input type="checkbox" id="stabilizeCheckbox">
     }
 </script>
 
-</body></html>
+</html>
