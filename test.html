@@ -18,7 +18,7 @@
       height: 1024px;
       border: 1px solid lightgray;
     }
-	.signature {
+	#signature {
 		font-size: x-large;
 		font-weight: bold;
 	}
@@ -155,7 +155,7 @@
 	}
 
 	var maxLevel = 0;
-	function setHierarchy(node, level) {
+	function setHierarchy(nodeData, edgeData, node, level) {
 		if (node.level != null) {
 			return;
 		}
@@ -165,9 +165,9 @@
 		console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
 		node.level = level;
 		var cfgEdges = findEdges(node, edgeData).filter(isCfgEdge);
-		for (var i=0; i<cfgEdges.length; i++) {
+		for (var i=0; i < cfgEdges.length; i++) {
 			var childNode = findNodeById(nodeData, cfgEdges[i].to);
-			setHierarchy(childNode, level + 1);
+			setHierarchy(nodeData, edgeData, childNode, level + 1);
 		}
 	}
 
@@ -179,15 +179,37 @@
 		return $.inArray(edge.type, ["cfg", "bb"]) != -1;
 	}
 	
-	var root;
-	var nodeData;
-	var edgeData;
-	var nodes;
-	var edges;
-	var container;
-	var data;
-	var options;
-	var network;
+	function getCfgNodeDisplayString(node, omitId) {
+		var outputValue = ""; 
+		if (!omitId) {
+			outputValue += "[" + node.id + "]: ";
+		}
+		outputValue += node.name;	
+		
+		if (node.operands) {
+			outputValue += "[";
+			// TODO comparator yet missing!
+			if (node.name==="IFInst") {
+				outputValue += "#" + node.operands[0] + " ? " + "#" + node.operands[1];
+			} else {
+				outputValue += node.operands.map(function (id) { return "#" + id }).toString();
+			}
+			outputValue += "]";
+		}
+		return outputValue;
+	}
+	
+	var cfgRoot;
+	var cfgNodeData;
+	var cfgEdgeData;
+	var cfgNodes;
+	var cfgEdges;
+	var cfgNodeMap;
+	var cfgContainer;
+	var cfgData;
+	var cfgOptions;
+	var cfgNetwork;
+	var cfgSimplifyStructure = true;
 	
     function showControlFlow(passIndex) {
 		
@@ -195,26 +217,68 @@
 		$("#passList").children().removeClass("pass-button-active");
 		$("#passButton" + passIndex).addClass("pass-button-active");
 		
-        // create an array with nodes
-        nodeData = jsonData.passes[passIndex].nodes;
-        edgeData = jsonData.passes[passIndex].edges;
+		cfgNodeMap = {};
 		
-		if (nodeData.length <= 0) {
-			nodes.clear();
-			edges.clear();		
+		// no HIR
+		if (!jsonData.passes[passIndex].nodes || jsonData.passes[passIndex].nodes.length <= 0) {
+			cfgNodes.clear();
+			cfgEdges.clear();					
 			return;
-		}
-
-		// create labels
-		$.each(nodeData, function (index, node) {
-			node.label = "[" + node.id + "]: " + node.name;
+		}	
+		
+        // create an array with nodes
+        cfgNodeData = jsonData.passes[passIndex].nodes.filter(isCfgNode);
+        cfgEdgeData = jsonData.passes[passIndex].edges.filter(isCfgEdge);				
+		
+		// create map for accessing the nodes over their id
+		$.each(cfgNodeData, function (index, node) {
+			cfgNodeMap[node.id] = node;
+			node.label = getCfgNodeDisplayString(node);		
 			if (node.BB) {
 				node.group = node.BB;
 			}
 		});
 
+		// collapse BasicBlocks to a single block
+		if (cfgSimplifyStructure) {
+		
+			// create a map for accessing edges by the key "edge.from"
+			var cfgEdgeMap = {};
+			$.each(cfgEdgeData, function (index, edge) {
+				var list = cfgEdgeMap[edge.from];
+				if (list === undefined) {
+					list = [];
+					cfgEdgeMap[edge.from] = list;
+				}
+				list.push(edge);
+			});
+				
+			cfgNodeData = cfgNodeData.filter(function (node) { return node.name === "BeginInst";});
+			$.each(cfgNodeData, function (index, beginInst) {
+				// BeginInst and EndInst have a 1:1 relationship
+				var bbEdge = cfgEdgeMap[beginInst.id][0];
+				var endInst = cfgNodeMap[bbEdge.to];
+				
+				// adjust the label
+				beginInst.label = "BB #" + beginInst.id;
+				if (endInst.name !== "GOTOInst") {
+					beginInst.label += "\n" + getCfgNodeDisplayString(endInst, true);
+				}
+				
+				// adjust outgoing edges to the combined begin block
+				var edgeList = cfgEdgeMap[endInst.id];
+				if (edgeList) {
+					for (var edge of edgeList) {
+						edge.from = beginInst.id;
+					}
+				}
+			});
+			
+			cfgEdgeData = jsonData.passes[passIndex].edges.filter(function (edge) { return edge.type !== 'bb';});				
+		}
+
 		// format edges
-		$.each(edgeData, function (index, edge) {
+		$.each(cfgEdgeData, function (index, edge) {
 			if (edge.type == 'bb') {
 				edge.dashes = true;
 			// set label true/false for if branches
@@ -223,15 +287,15 @@
 			}
 		});
 
-		root = findRoot(nodeData);
-		setHierarchy(root, 0);
+		cfgRoot = findRoot(cfgNodeData);
+		setHierarchy(cfgNodeData, cfgEdgeData, cfgRoot, 0);
 		// set all other levels to max + 1;
-		nodeData
+		cfgNodeData
 			.filter(function (node) {return typeof node.level == 'undefined'})
 			.forEach(function(node) {node.level = maxLevel + 1;});
 		// filter nodes and edges for control flow
-		nodes = new vis.DataSet(nodeData.filter(isCfgNode));
-		edges = new vis.DataSet(edgeData.filter(isCfgEdge));
+		cfgNodes = new vis.DataSet(cfgNodeData);
+		cfgEdges = new vis.DataSet(cfgEdgeData);
 
 		// TODO: evaluate => showing edge labels only on hover => https://jsfiddle.net/8xrcbg0k/2/
 		// overlay request => https://github.com/almende/vis/issues/2139/
@@ -241,12 +305,12 @@
 		//       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/   
 
 		// create a network
-		container = document.getElementById('mynetwork');
-		data = {
-			nodes: nodes,
-			edges: edges,
+		cfgContainer = document.getElementById('mynetwork');
+		cfgData = {
+			nodes: cfgNodes,
+			edges: cfgEdges,
 		};
-		options = {
+		cfgOptions = {
 			nodes: {
 				shape: "box",
 			},
@@ -266,9 +330,9 @@
 				improvedLayout: true,
 				hierarchical: {
 					enabled: true,
-					levelSeparation: 100,
-					nodeSpacing: 450,
-					treeSpacing: 100,
+					//levelSeparation: 100,
+					nodeSpacing: 150,
+					//treeSpacing: 100,
 					blockShifting: true,
 					edgeMinimization: true,
 					parentCentralization: true,
@@ -280,7 +344,8 @@
 				enabled: false
 			}
 		}
-		network = new vis.Network(container, data, options);		
+		cfgNetwork = new vis.Network(cfgContainer, cfgData, cfgOptions);		
+		cfgNetwork.stabilize(5000);
 	}
 
         // set the first initial zoom level
