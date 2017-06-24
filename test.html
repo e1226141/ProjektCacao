@@ -18,11 +18,25 @@
       height: 1024px;
       border: 1px solid lightgray;
     }
+	.signature {
+		font-size: x-large;
+		font-weight: bold;
+	}
+	.pass-button {
+		width: 190px;
+		font-size: small;
+	}
+	.pass-button:focus {
+		background-color: #A6A6A6;
+	}
+	.pass-button-active {
+		background-color: #A6A6A6;
+	}
   </style>
 </head>
 <body>
 
-<div class="ui-layout-center">Center
+<div class="ui-layout-center">
 	<div id="mynetwork">
 		<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
 			<canvas width="1920" height="1024" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
@@ -30,12 +44,15 @@
 		</div>
 	</div>
 </div>
-<div class="ui-layout-north">North</div>
-<div class="ui-layout-south">South</div>
-<div class="ui-layout-east">East</div>
-<div class="ui-layout-west">
-	<div id="passList"></div>
+<div class="ui-layout-north">
+	<div id="signature"></div>
 </div>
+<div class="ui-layout-west">
+	Passes:<div id="passList"></div>
+</div>
+
+<div class="ui-layout-south"></div>
+<div class="ui-layout-east"></div>
 
 </body>
 
@@ -44,9 +61,26 @@
     /**
      * start chrome with '--allow-file-access-from-files' for loading external local files!
      */
-	 
+	var uiLayoutDefaults = {
+		initClosed: true,   
+		size:	"auto",		
+		north: {
+			size: 		40,	
+			resizable: 	true,
+			slidable:	true,
+			initClosed:	false
+		},
+		west: {
+			size: 		220,	
+			resizable: 	true,
+			slidable:	true,
+			initClosed:	false
+		}
+	};
+	
+	var uiLayout; 
 	$(document).ready(function () {
-		$('body').layout();
+		$('body').layout(uiLayoutDefaults);
 	});
 
     // helper method to load local JSON file
@@ -65,156 +99,189 @@
     var jsonData = null;
     loadLocalJSON(function(response) {
         jsonData= JSON.parse(response);
-        initialize();
+		preventButtonDefault();
+		initSignature();
+		initPassList();
+        showControlFlow(4);
     }, "./xyz.json");
 
-	function getPassNames() {
-		var names = [];		
-	    for (var pass of jsonData.passes) {			
-			names.push(pass.name);
-		}
-		return names;		
+	function preventButtonDefault() {
+		$( "button, input, a" ).click( function( event ) {
+		  event.preventDefault();
+		});
+	}
+	
+	function initSignature() {	
+		var	className = jsonData.class.replace(/\//g, '.');
+		var methodSignature = jsonData.method + jsonData.desc;
+		$('#signature').append(className + ": " + methodSignature);
 	}
 	
 	function initPassList(passes) {		
-		var passList = $('#passList');
-		for (var pass of jsonData.passes) {			
-			passList.append(pass.name + "</br>"); 
-		}			
+		var passList = $('#passList');		
+		for (var passIndex in jsonData.passes) {
+			var pass = jsonData.passes[passIndex];
+			var name = pass.name;			
+			// strip the extra 'Pass' from the Name
+			name = name.slice(0, name.lastIndexOf("Pass"));		
+			passList.append("<button"
+				+ " id=\"passButton" + passIndex + "\"" 
+				+ " class=\"pass-button ui-button ui-widget ui-corner-all\"" 
+				+ " onclick=\"showControlFlow(" + passIndex + ");\">" + name + "</button>"); 
+		}
 	}
 	
-    function initialize() {
-		initPassList();
+	// returns the root element
+	function findRoot(nodes) {
+		for(var i=0;i<nodes.length;i++) {
+			if(nodes[i].root) {
+				return nodes[i];
+			}
+		}
+		return null;
+	}
+
+	function findNodeById(nodes, id) {
+		for (var i=0; i<nodes.length; i++) {
+			if (nodes[i].id == id) {
+				return nodes[i];
+			}
+		}
+		return null;
+	}
+
+	function findEdges(node, edges) {
+		return edges.filter(function (edge) { return edge.from == node.id});
+	}
+
+	var maxLevel = 0;
+	function setHierarchy(node, level) {
+		if (node.level != null) {
+			return;
+		}
+		if (level > maxLevel) {
+			maxLevel = level;
+		}
+		console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
+		node.level = level;
+		var cfgEdges = findEdges(node, edgeData).filter(isCfgEdge);
+		for (var i=0; i<cfgEdges.length; i++) {
+			var childNode = findNodeById(nodeData, cfgEdges[i].to);
+			setHierarchy(childNode, level + 1);
+		}
+	}
+
+	function isCfgNode(node) {
+		return $.inArray(node.name, ["BeginInst", "GOTOInst", "RETURNInst", "IFInst"]) != -1;
+	}
+
+	function isCfgEdge(edge) {
+		return $.inArray(edge.type, ["cfg", "bb"]) != -1;
+	}
+	
+	var root;
+	var nodeData;
+	var edgeData;
+	var nodes;
+	var edges;
+	var container;
+	var data;
+	var options;
+	var network;
+	
+    function showControlFlow(passIndex) {
+		
+		// mark the selected pass
+		$("#passList").children().removeClass("pass-button-active");
+		$("#passButton" + passIndex).addClass("pass-button-active");
 		
         // create an array with nodes
-        var nodeData = jsonData.passes[4].nodes;
-        var edgeData = jsonData.passes[4].edges;
+        nodeData = jsonData.passes[passIndex].nodes;
+        edgeData = jsonData.passes[passIndex].edges;
+		
+		if (nodeData.length <= 0) {
+			nodes.clear();
+			edges.clear();		
+			return;
+		}
 
-        // create labels
-        $.each(nodeData, function (index, node) {
-            node.label = "[" + node.id + "]: " + node.name;
-            if (node.BB) {
-                node.group = node.BB;
-            }
-        });
+		// create labels
+		$.each(nodeData, function (index, node) {
+			node.label = "[" + node.id + "]: " + node.name;
+			if (node.BB) {
+				node.group = node.BB;
+			}
+		});
 
-        // format edges
-        $.each(edgeData, function (index, edge) {
-            if (edge.type == 'bb') {
-                edge.dashes = true;
-            // set label true/false for if branches
-            } else if (edge.type == 'cfg' && typeof edge.trueBranch != 'undefined') {
-                edge.label = edge.trueBranch;
-            }
-        });
+		// format edges
+		$.each(edgeData, function (index, edge) {
+			if (edge.type == 'bb') {
+				edge.dashes = true;
+			// set label true/false for if branches
+			} else if (edge.type == 'cfg' && typeof edge.trueBranch != 'undefined') {
+				edge.label = edge.trueBranch;
+			}
+		});
 
-        // returns the root element
-        function findRoot(nodes) {
-            for(var i=0;i<nodes.length;i++) {
-                if(nodes[i].root) {
-                    return nodes[i];
-                }
-            }
-            return null;
-        }
+		root = findRoot(nodeData);
+		setHierarchy(root, 0);
+		// set all other levels to max + 1;
+		nodeData
+			.filter(function (node) {return typeof node.level == 'undefined'})
+			.forEach(function(node) {node.level = maxLevel + 1;});
+		// filter nodes and edges for control flow
+		nodes = new vis.DataSet(nodeData.filter(isCfgNode));
+		edges = new vis.DataSet(edgeData.filter(isCfgEdge));
 
-        function findNodeById(nodes, id) {
-            for (var i=0; i<nodes.length; i++) {
-                if (nodes[i].id == id) {
-                    return nodes[i];
-                }
-            }
-            return null;
-        }
+		// TODO: evaluate => showing edge labels only on hover => https://jsfiddle.net/8xrcbg0k/2/
+		// overlay request => https://github.com/almende/vis/issues/2139/
+		// TODO: select groups of nodes with right mouse => https://github.com/almende/vis/issues/977
+		// TODO: drawing on canvas => http://visjs.org/examples/network/events/renderEvents.html
+		//       convex shape => http://jsfiddle.net/rLf78a6x/8/
+		//       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/   
 
-        function findEdges(node, edges) {
-            return edges.filter(function (edge) { return edge.from == node.id});
-        }
-
-        var maxLevel = 0;
-        function setHierarchy(node, level) {
-            if (node.level != null) {
-                return;
-            }
-            if (level > maxLevel) {
-                maxLevel = level;
-            }
-            console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
-            node.level = level;
-            var cfgEdges = findEdges(node, edgeData).filter(isCfgEdge);
-            for (var i=0; i<cfgEdges.length; i++) {
-                var childNode = findNodeById(nodeData, cfgEdges[i].to);
-                setHierarchy(childNode, level + 1);
-            }
-        }
-
-        var root = findRoot(nodeData);
-        setHierarchy(root, 0);
-        // set all other levels to max + 1;
-        nodeData
-            .filter(function (node) {return typeof node.level == 'undefined'})
-            .forEach(function(node) {node.level = maxLevel + 1;});
-
-        function isCfgNode(node) {
-            return $.inArray(node.name, ["BeginInst", "GOTOInst", "RETURNInst", "IFInst"]) != -1;
-        }
-
-        function isCfgEdge(edge) {
-            return $.inArray(edge.type, ["cfg", "bb"]) != -1;
-        }
-
-        // filter nodes and edges for control flow
-        var nodes = new vis.DataSet(nodeData.filter(isCfgNode));
-        var edges = new vis.DataSet(edgeData.filter(isCfgEdge));
-
-        // TODO: evaluate => showing edge labels only on hover => https://jsfiddle.net/8xrcbg0k/2/
-        // overlay request => https://github.com/almende/vis/issues/2139/
-        // TODO: select groups of nodes with right mouse => https://github.com/almende/vis/issues/977
-        // TODO: drawing on canvas => http://visjs.org/examples/network/events/renderEvents.html
-        //       convex shape => http://jsfiddle.net/rLf78a6x/8/
-        //       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/   
-
-        // create a network
-        var container = document.getElementById('mynetwork');
-        var data = {
-            nodes: nodes,
-            edges: edges,
-        };
-        var options = {
-            nodes: {
-                shape: "box",
-            },
-            edges: {
-                arrows: {
-                    to: {
-                        enabled: true
-                    }
-                },
-                smooth: {
-                    enabled: true,
-                    type: 'continuous'
-                }
-            },
-            layout: {
-                randomSeed: undefined,
-                improvedLayout: true,
-                hierarchical: {
-                    enabled: true,
-                    levelSeparation: 100,
-                    nodeSpacing: 450,
-                    treeSpacing: 100,
-                    blockShifting: true,
-                    edgeMinimization: true,
-                    parentCentralization: true,
-                    direction: 'UD',        // UD, DU, LR, RL
-                    sortMethod: 'directed'   // hubsize, directed
-                }
-            },
-            physics: {
-                enabled: false
-            }
-        }
-        var network = new vis.Network(container, data, options);
+		// create a network
+		container = document.getElementById('mynetwork');
+		data = {
+			nodes: nodes,
+			edges: edges,
+		};
+		options = {
+			nodes: {
+				shape: "box",
+			},
+			edges: {
+				arrows: {
+					to: {
+						enabled: true
+					}
+				},
+				smooth: {
+					enabled: true,
+					type: 'continuous'
+				}
+			},
+			layout: {
+				randomSeed: undefined,
+				improvedLayout: true,
+				hierarchical: {
+					enabled: true,
+					levelSeparation: 100,
+					nodeSpacing: 450,
+					treeSpacing: 100,
+					blockShifting: true,
+					edgeMinimization: true,
+					parentCentralization: true,
+					direction: 'UD',        // UD, DU, LR, RL
+					sortMethod: 'directed'   // hubsize, directed
+				}
+			},
+			physics: {
+				enabled: false
+			}
+		}
+		network = new vis.Network(container, data, options);		
+	}
 
         // set the first initial zoom level
         /*network.once('initRedraw', function() {
@@ -299,7 +366,7 @@
                 network.stabilize();
             }
         }*/
-    }
+    
 </script>
 
 </html>
