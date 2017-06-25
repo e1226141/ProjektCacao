@@ -5,7 +5,7 @@
   <script type="text/javascript" src="./lib/js/jquery-3.2.0.min.js"></script>
   <script type="text/javascript" src="./lib/js/jquery.layout.js"></script>  
   <script type="text/javascript" src="./lib/js/vis.js"></script>    
-  <script type="text/javascript" src="./lib/js/jquery-ui.min.css"></script>
+  <script type="text/javascript" src="./lib/js/jquery-ui.min.js"></script>
   <link rel="stylesheet" type="text/css" href="./lib/css/vis.css">
   <link rel="stylesheet" type="text/css" href="./lib/css/layout-default-latest.css">
   <link rel="stylesheet" type="text/css" href="./lib/css/jquery-ui.min.css">
@@ -13,7 +13,7 @@
   <link rel="stylesheet" type="text/css" href="./lib/css/jquery-ui.theme.min.css">    
 
   <style type="text/css">
-    #mynetwork {
+    #cfgNetwork {
       width: 1920px;
       height: 1024px;
       border: 1px solid lightgray;
@@ -37,7 +37,11 @@
 <body>
 
 <div class="ui-layout-center">
-	<div id="mynetwork">
+	Search: <input id="cfgSearch"> 
+	<label for="cfgShowBB">show BB
+		<input type="checkbox" id="cfgShowBB" name="checkbox-showBB" value="checkbox-showBB" onclick="showControlFlow(cfgSelectedPass);" checked " />      
+    </label>
+	<div id="cfgNetwork">
 		<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
 			<canvas width="1920" height="1024" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
 			</canvas>
@@ -79,8 +83,16 @@
 	};
 	
 	var uiLayout; 
+	var jsonData = null;   
 	$(document).ready(function () {
 		$('body').layout(uiLayoutDefaults);
+		loadLocalJSON(function(response) {
+			jsonData= JSON.parse(response);
+			//preventButtonDefault();
+			initSignature();
+			initPassList();
+			showControlFlow(4);
+		}, "./xyz.json");		
 	});
 
     // helper method to load local JSON file
@@ -95,16 +107,7 @@
         }
         xobj.send(null);
     }
-
-    var jsonData = null;
-    loadLocalJSON(function(response) {
-        jsonData= JSON.parse(response);
-		preventButtonDefault();
-		initSignature();
-		initPassList();
-        showControlFlow(4);
-    }, "./xyz.json");
-
+    
 	function preventButtonDefault() {
 		$( "button, input, a" ).click( function( event ) {
 		  event.preventDefault();
@@ -204,22 +207,22 @@
 	var cfgEdgeData;
 	var cfgNodes;
 	var cfgEdges;
-	var cfgNodeMap;
-	var cfgContainer;
+	var cfgNodeMap;	
 	var cfgData;
 	var cfgOptions;
 	var cfgNetwork;
-	var cfgSimplifyStructure = true;
+	var cfgSelectedPass;
 	
-    function showControlFlow(passIndex) {
-		
+    function showControlFlow(passIndex) {	
+				
 		// mark the selected pass
+		cfgSelectedPass = passIndex;
 		$("#passList").children().removeClass("pass-button-active");
 		$("#passButton" + passIndex).addClass("pass-button-active");
 		
-		cfgNodeMap = {};
+		cfgNodeMap = {};			
 		
-		// no HIR
+		// no HIR in this pass
 		if (!jsonData.passes[passIndex].nodes || jsonData.passes[passIndex].nodes.length <= 0) {
 			cfgNodes.clear();
 			cfgEdges.clear();					
@@ -229,6 +232,10 @@
         // create an array with nodes
         cfgNodeData = jsonData.passes[passIndex].nodes.filter(isCfgNode);
         cfgEdgeData = jsonData.passes[passIndex].edges.filter(isCfgEdge);				
+		
+		// create a deep copy of nodes and edges
+		cfgNodeData =  JSON.parse(JSON.stringify(cfgNodeData)); //[...cfgNodeData];
+		cfgEdgeData =  JSON.parse(JSON.stringify(cfgEdgeData)); //[...cfgEdgeData];
 		
 		// create map for accessing the nodes over their id
 		$.each(cfgNodeData, function (index, node) {
@@ -240,7 +247,7 @@
 		});
 
 		// collapse BasicBlocks to a single block
-		if (cfgSimplifyStructure) {
+		if ($('#cfgShowBB').prop('checked')) {
 		
 			// create a map for accessing edges by the key "edge.from"
 			var cfgEdgeMap = {};
@@ -260,7 +267,7 @@
 				var endInst = cfgNodeMap[bbEdge.to];
 				
 				// adjust the label
-				beginInst.label = "BB #" + beginInst.id;
+				beginInst.label = "BB #" + beginInst.id + " => #" + endInst.id;
 				if (endInst.name !== "GOTOInst") {
 					beginInst.label += "\n" + getCfgNodeDisplayString(endInst, true);
 				}
@@ -274,7 +281,7 @@
 				}
 			});
 			
-			cfgEdgeData = jsonData.passes[passIndex].edges.filter(function (edge) { return edge.type !== 'bb';});				
+			cfgEdgeData = cfgEdgeData.filter(function (edge) { return edge.type !== 'bb';});				
 		}
 
 		// format edges
@@ -293,9 +300,6 @@
 		cfgNodeData
 			.filter(function (node) {return typeof node.level == 'undefined'})
 			.forEach(function(node) {node.level = maxLevel + 1;});
-		// filter nodes and edges for control flow
-		cfgNodes = new vis.DataSet(cfgNodeData);
-		cfgEdges = new vis.DataSet(cfgEdgeData);
 
 		// TODO: evaluate => showing edge labels only on hover => https://jsfiddle.net/8xrcbg0k/2/
 		// overlay request => https://github.com/almende/vis/issues/2139/
@@ -304,49 +308,87 @@
 		//       convex shape => http://jsfiddle.net/rLf78a6x/8/
 		//       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/   
 
-		// create a network
-		cfgContainer = document.getElementById('mynetwork');
-		cfgData = {
-			nodes: cfgNodes,
-			edges: cfgEdges,
-		};
-		cfgOptions = {
-			nodes: {
-				shape: "box",
-			},
-			edges: {
-				arrows: {
-					to: {
-						enabled: true
+		if (!cfgNetwork) {
+			// create a network		
+		
+			// filter nodes and edges for control flow
+			cfgNodes = new vis.DataSet(cfgNodeData);
+			cfgEdges = new vis.DataSet(cfgEdgeData);			
+			cfgData = {
+				nodes: cfgNodes,
+				edges: cfgEdges,
+			};		
+			cfgOptions = {
+				nodes: {
+					shape: "box",
+				},
+				edges: {
+					arrows: {
+						to: {
+							enabled: true
+						}
+					},
+					smooth: {
+						enabled: true,
+						type: 'continuous'
 					}
 				},
-				smooth: {
-					enabled: true,
-					type: 'continuous'
+				layout: {
+					randomSeed: undefined,
+					improvedLayout: true,
+					hierarchical: {
+						enabled: true,
+						//levelSeparation: 100,
+						nodeSpacing: 150,
+						//treeSpacing: 100,
+						blockShifting: true,
+						edgeMinimization: true,
+						parentCentralization: true,
+						direction: 'UD',        // UD, DU, LR, RL
+						sortMethod: 'directed'   // hubsize, directed
+					}
+				},
+				physics: {
+					enabled: false
 				}
-			},
-			layout: {
-				randomSeed: undefined,
-				improvedLayout: true,
-				hierarchical: {
-					enabled: true,
-					//levelSeparation: 100,
-					nodeSpacing: 150,
-					//treeSpacing: 100,
-					blockShifting: true,
-					edgeMinimization: true,
-					parentCentralization: true,
-					direction: 'UD',        // UD, DU, LR, RL
-					sortMethod: 'directed'   // hubsize, directed
-				}
-			},
-			physics: {
-				enabled: false
 			}
-		}
-		cfgNetwork = new vis.Network(cfgContainer, cfgData, cfgOptions);		
+		
+			var cfgContainer = document.getElementById('cfgNetwork');
+			cfgNetwork = new vis.Network(cfgContainer, cfgData, cfgOptions);		
+			cfgNetwork.fit();
+		} else {
+			// network already has been drawn
+			cfgEdges.clear();			
+			cfgNodes.clear();			
+			cfgEdges.add(cfgEdgeData);
+			cfgNodes.add(cfgNodeData);			
+		}		
+		
+		$( "#cfgSearch" ).autocomplete({
+		  minLength: 0,
+		  source: cfgNodeData,
+		  focus: function( event, ui ) {
+			$("#cfgSearch").val( ui.item.id );
+			cfgNetwork.selectNodes([ui.item.id]);
+			cfgNetwork.focus(ui.item.id);
+			return false;
+		  },
+		  select: function( event, ui ) {
+			$("#cfgSearch").val( ui.item.id );			 
+			cfgNetwork.selectNodes([ui.item.id]);
+			cfgNetwork.focus(ui.item.id);			
+			return false;
+		  }
+		})
+		.autocomplete( "instance" )._renderItem = function( ul, node ) {
+		  return $( "<li>" )
+			.append( "<div>" + node.label + "</div>" )
+			.appendTo( ul );
+		};
+		
 		cfgNetwork.stabilize(5000);
 	}
+	
 
         // set the first initial zoom level
         /*network.once('initRedraw', function() {
