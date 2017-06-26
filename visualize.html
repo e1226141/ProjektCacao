@@ -40,17 +40,22 @@
 	#cfgStatistics {
 		float: right;
 	}
+	#statistics {
+		float: right;
+	}
   </style>
 </head>
 <body>
 
 <div class="ui-layout-center" id="nestedLayout">
 	<div class="ui-layout-west">
-		Search: <input id="cfgSearch"> 
+		<label for="cfgSearch">Search: 
+			<input id="cfgSearch">
+		</label>
 		<label for="cfgShowBB">BB
 			<input type="checkbox" id="cfgShowBB" name="checkbox-showBB" value="checkbox-showBB" onclick="showControlFlow(jsonData.passes[cfgSelectedPass]);" checked />      
 		</label>
-		<div id="cfgStatistics"></div> 
+		<div id="cfgStatistics"></div>
 		<div id="cfgNetwork">
 			<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
 				<canvas width="90%" height="90%" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
@@ -60,6 +65,10 @@
 	</div>
 
 	<div class="ui-layout-center">
+		<label for="search">Search: 
+			<input id="search">
+		</label>
+		<div id="statistics"></div>
 		<div id="network">
 			<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
 				<canvas width="90%" height="90%" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
@@ -160,7 +169,7 @@
 			passList.append("<button"
 				+ " id=\"passButton" + passIndex + "\"" 
 				+ " class=\"pass-button ui-button ui-widget ui-corner-all\"" 
-				+ " onclick=\"showControlFlow(" + passIndex + ");\">" + name + "</button>"); 
+				+ " onclick=\"showPass(" + passIndex + ");\">" + name + "</button>"); 
 		}
 	}
 	
@@ -188,7 +197,7 @@
 	}
 
 	var maxLevel = 0;
-	function setHierarchy(nodeData, edgeData, node, level) {
+	function setHierarchy(nodeMap, edgeMap, node, level) {
 		if (node.level != null) {
 			return;
 		}
@@ -197,12 +206,16 @@
 		}
 		//console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
 		node.level = level;
-		var edges = findEdges(node, edgeData);
-		for (var i=0; i < edges.length; i++) {
-			var childNode = findNodeById(nodeData, edges[i].to);
-			setHierarchy(nodeData, edgeData, childNode, level + 1);
+		
+		// todo use map instead of edges.filter...
+		var edges = edgeMap[node.id];
+		if (edges) {
+			for (var i=0; i < edges.length; i++) {
+				var childNode = nodeMap[edges[i].to];
+				setHierarchy(nodeMap, edgeMap, childNode, level + 1);
+			}
 		}
-	}
+	}	
 
 	function isCfgNode(node) {
 		return $.inArray(node.name, ["BeginInst", "GOTOInst", "RETURNInst", "IFInst"]) != -1;
@@ -212,7 +225,7 @@
 		return $.inArray(edge.type, ["cfg", "bb"]) != -1;
 	}
 	
-	function getCfgNodeDisplayString(node, omitId) {
+	function getNodeDisplayString(node, omitId) {
 		var outputValue = ""; 
 		if (!omitId) {
 			outputValue += "[" + node.id + "]: ";
@@ -267,8 +280,7 @@
 		
 		// print statistics	
 		$("#cfgStatistics").html(
-			"<b>" + pass.nodes.reduce(function(n, val) {return n + (val.name === "BeginInst");}, 0) + "</b>x BB, " + 
-			"<b>" + pass.nodes.length + "</b>x instructions"
+			"<b>" + pass.nodes.reduce(function(n, val) {return n + (val.name === "BeginInst");}, 0) + "</b>x BB"
 		);	
 		
         // create an array with nodes
@@ -282,25 +294,25 @@
 		// create map for accessing the nodes over their id
 		$.each(cfgNodeData, function (index, node) {
 			cfgNodeMap[node.id] = node;
-			node.label = getCfgNodeDisplayString(node);		
+			node.label = getNodeDisplayString(node);		
 			if (node.BB) {
 				node.group = node.BB;
 			}
 		});
+		
+		// create a map for accessing edges by the key "edge.from"
+		var cfgEdgeMap = {};
+		$.each(cfgEdgeData, function (index, edge) {
+			var list = cfgEdgeMap[edge.from];
+			if (list === undefined) {
+				list = [];
+				cfgEdgeMap[edge.from] = list;
+			}
+			list.push(edge);
+		});
 
 		// collapse BasicBlocks to a single block
-		if ($('#cfgShowBB').prop('checked')) {
-		
-			// create a map for accessing edges by the key "edge.from"
-			var cfgEdgeMap = {};
-			$.each(cfgEdgeData, function (index, edge) {
-				var list = cfgEdgeMap[edge.from];
-				if (list === undefined) {
-					list = [];
-					cfgEdgeMap[edge.from] = list;
-				}
-				list.push(edge);
-			});
+		if ($('#cfgShowBB').prop('checked')) {	
 				
 			cfgNodeData = cfgNodeData.filter(function (node) { return node.name === "BeginInst";});
 			$.each(cfgNodeData, function (index, beginInst) {
@@ -311,7 +323,7 @@
 				// adjust the label
 				beginInst.label = "BB #" + beginInst.id + " => #" + endInst.id;
 				if (endInst.name !== "GOTOInst") {
-					beginInst.label += "\n" + getCfgNodeDisplayString(endInst, true);
+					beginInst.label += "\n" + getNodeDisplayString(endInst, true);
 				}
 				
 				// adjust outgoing edges to the combined begin block
@@ -338,7 +350,7 @@
 
 		cfgRoot = findRoot(cfgNodeData);
 		maxLevel=0;
-		setHierarchy(cfgNodeData, cfgEdgeData, cfgRoot, 0);
+		setHierarchy(cfgNodeMap, cfgEdgeMap, cfgRoot, 0);
 		// set all other levels to max + 1;
 		cfgNodeData
 			.filter(function (node) {return typeof node.level == 'undefined'})
@@ -374,7 +386,7 @@
 					improvedLayout: true,
 					hierarchical: {
 						enabled: true,
-						//levelSeparation: 100,
+						levelSeparation: 60,
 						nodeSpacing: 150,
 						//treeSpacing: 100,
 						blockShifting: true,
@@ -390,8 +402,11 @@
 			}
 		
 			var cfgContainer = document.getElementById('cfgNetwork');
-			cfgNetwork = new vis.Network(cfgContainer, cfgData, cfgOptions);		
-			cfgNetwork.fit();
+			cfgNetwork = new vis.Network(cfgContainer, cfgData, cfgOptions);										
+		    cfgNetwork.on("selectNode", function (params) {
+				network.selectNodes(params.nodes);
+				network.focus(params.nodes[0], {scale: 1.2});
+			});			
 		} else {
 			// network already has been drawn
 			cfgEdges.clear();			
@@ -399,6 +414,7 @@
 			cfgEdges.add(cfgEdgeData);
 			cfgNodes.add(cfgNodeData);			
 		}		
+		cfgNetwork.fit();
 		
 		$( "#cfgSearch" ).autocomplete({
 		  minLength: 0,
@@ -412,7 +428,10 @@
 		  select: function( event, ui ) {
 			$("#cfgSearch").val( ui.item.id );			 
 			cfgNetwork.selectNodes([ui.item.id]);
-			cfgNetwork.focus(ui.item.id, {scale: 1.2});						
+			cfgNetwork.focus(ui.item.id, {scale: 1.2});
+			// also show the selected entry in the network
+			network.selectNodes([ui.item.id]);
+			network.focus(ui.item.id, {scale: 1.2});			
 			return false;
 		  }
 		})
@@ -436,7 +455,8 @@
 	var network;
 	
 	function showNetwork(pass) {			
-		nodeMap = {};	
+		nodeMap = {};
+		$("#statistics").text("");
 		
 		// no HIR in this pass		
 		if (!pass.nodes || pass.nodes.length <= 0) {			
@@ -449,10 +469,13 @@
         nodeData = JSON.parse(JSON.stringify(pass.nodes));
         edgeData = JSON.parse(JSON.stringify(pass.edges));
 		
+		// print statistics	
+		$("#statistics").html("<b>" + pass.nodes.length + "</b>x instructions");	
+		
 		// create map for accessing the nodes over their id
 		$.each(nodeData, function (index, node) {
 			nodeMap[node.id] = node;
-			node.label = getCfgNodeDisplayString(node);		
+			node.label = getNodeDisplayString(node);		
 			if (node.BB) {
 				node.group = node.BB;
 			}
@@ -468,14 +491,46 @@
 			}
 		});
 		
+		// create a map for accessing edges by the key "edge.from"
+		var edgeMap = {};
+		$.each(edgeData, function (index, edge) {
+			var list = edgeMap[edge.from];
+			if (list === undefined) {
+				list = [];
+				edgeMap[edge.from] = list;
+			}
+			list.push(edge);
+		});
+		
 		root = findRoot(nodeData);
 		maxLevel=0;
-		setHierarchy(nodeData, edgeData, root, 0);
+		setHierarchy(nodeMap, edgeMap, root, 0);
 		// set all other levels to max + 1;
-		nodeData
-			.filter(function (node) {return typeof node.level == 'undefined'})
-			.forEach(function(node) {node.level = maxLevel + 1;});	
-
+		var unassignedNodes = nodeData
+			.filter(function (node) {return typeof node.level === 'undefined'});
+		if (unassignedNodes && unassignedNodes.length > 0) {
+			// unassigned nodes at this point are probably only parameters for others			
+			var tryCount = 10;
+			while(unassignedNodes && unassignedNodes.length > 0 && (tryCount--) > 0) {
+				unassignedNodes.forEach(function(node) {
+					var edges = edgeMap[node.id];
+					if (edges) {
+						var minLevel = Math.min.apply(Math, 
+							edges.map(function (edge) {
+								var level = nodeMap[edge.to].level;	
+								if (!level) level = 9999999;
+								return level;
+							}));
+						if (minLevel !== 9999999) {
+							node.level = minLevel - 1;
+						}					
+					}
+				});
+				unassignedNodes = unassignedNodes.filter(function (node) {return typeof node.level  === 'undefined'});
+			}					
+			unassignedNodes.forEach(function(node) {node.level = maxLevel + 1;});	
+		}
+						
 		if (!network) {
 			// create a network		
 		
@@ -522,15 +577,37 @@
 			}
 		
 			var container = document.getElementById('network');
-			network = new vis.Network(container, data, options);		
-			network.fit();
+			network = new vis.Network(container, data, options);					
 		} else {
 			// network already has been drawn
 			edges.clear();			
 			nodes.clear();			
 			edges.add(edgeData);
 			nodes.add(nodeData);			
-		}		
+		}
+		network.fit();
+		
+		$( "#search" ).autocomplete({
+		  minLength: 0,
+		  source: nodeData,
+		  focus: function( event, ui ) {
+			$("#search").val( ui.item.id );
+			network.selectNodes([ui.item.id]);
+			network.focus(ui.item.id);
+			return false;
+		  },
+		  select: function( event, ui ) {
+			$("#search").val( ui.item.id );			 
+			network.selectNodes([ui.item.id]);
+			network.focus(ui.item.id, {scale: 1.2});						
+			return false;
+		  }
+		})
+		.autocomplete( "instance" )._renderItem = function( ul, node ) {
+		  return $( "<li>" )
+			.append( "<div>" + node.label + "</div>" )
+			.appendTo( ul );
+		};
 	}
 
 
