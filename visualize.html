@@ -240,26 +240,31 @@
 	
 	function getNodeDisplayString(node, simpleDisplay) {
 		var outputValue = ""; 
-		if (!simpleDisplay) {
-			outputValue += "[" + node.id + "]: ";
-		}		
-		outputValue += node.name;	
-		if (node.name==="CONSTInst") {
-			if (simpleDisplay) {
+		
+		if (simpleDisplay) {
+			if (node.name==="CONSTInst") {
 				outputValue = "Const: " + node.value;
-			} else {
+			} else if (node.name==="RETURNInst") {				
+				outputValue = "\nRETURN";
+				// can be void!
+				if (node.operands) {
+					outputValue += " #" + node.operands[0];
+				}
+			} else if (node.name==="IFInst") {								
+				outputValue = "\nIF [#" + node.operands[0] + " " + displayIFCondition(node.condition) + " #" + node.operands[1] + "]";
+			} else {			
+				outputValue = node.name;	
+				if (node.operands) {
+					outputValue += node.operands.map(function (id) { return "#" + id }).toString();
+				}
+			}				
+		} else {
+			outputValue = "[" + node.id + "]: " + node.name;		
+			if (node.name==="CONSTInst") {
 				outputValue +=": " + node.value;
 			}
-		}
-		
-		if (node.operands) {
-			if (simpleDisplay && node.name==="RETURNInst") {
-				outputValue = "\nRETURN #" + node.operands[0];
-			} else if (simpleDisplay && node.name==="IFInst") {				
-				outputValue = "\nIF #" + node.operands[0] + " " + displayIFCondition(node.condition) + " #" + node.operands[1];
-			} else {
+			if (node.operands) {
 				outputValue += "[";
-				// TODO comparator for IF yet missing in exported data!
 				if (node.name==="IFInst") {
 					outputValue += "#" + node.operands[0] + " " + displayIFCondition(node.condition) + " #" + node.operands[1];			
 				} else {
