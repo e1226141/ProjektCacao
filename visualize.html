@@ -16,12 +16,12 @@
     #cfgNetwork {
       width: 98%;
       height: 100%;
-      border: 1px solid lightgray;
+      border: 0px solid lightgray;
     }
 	#network {
-      width: 98%;
-      height: 100%;
-      border: 1px solid lightgray;
+      width: 96%;
+      height: 99%;
+      border: 0px solid lightgray;
     }
 	#signature {
 		font-size: x-large;
@@ -225,23 +225,49 @@
 		return $.inArray(edge.type, ["cfg", "bb"]) != -1;
 	}
 	
-	function getNodeDisplayString(node, omitId) {
-		var outputValue = ""; 
-		if (!omitId) {
-			outputValue += "[" + node.id + "]: ";
+	function displayIFCondition(cond) {
+		switch(cond) {
+			case "GE": return ">=";
+			case "GT": return ">";
+			case "LE": return "<=";
+			case "LT": return "<";
+			case "EQ": return "==";
+			case "NE": return "!=";			
+			default: return "?";
 		}
+	}
+	
+	
+	function getNodeDisplayString(node, simpleDisplay) {
+		var outputValue = ""; 
+		if (!simpleDisplay) {
+			outputValue += "[" + node.id + "]: ";
+		}		
 		outputValue += node.name;	
+		if (node.name==="CONSTInst") {
+			if (simpleDisplay) {
+				outputValue = "Const: " + node.value;
+			} else {
+				outputValue +=": " + node.value;
+			}
+		}
 		
 		if (node.operands) {
-			outputValue += "[";
-			// TODO comparator for IF yet missing in exported data!
-			if (node.name==="IFInst") {
-				outputValue += "#" + node.operands[0] + " ? " + "#" + node.operands[1];
+			if (simpleDisplay && node.name==="RETURNInst") {
+				outputValue = "\nRETURN #" + node.operands[0];
+			} else if (simpleDisplay && node.name==="IFInst") {				
+				outputValue = "\nIF #" + node.operands[0] + " " + displayIFCondition(node.condition) + " #" + node.operands[1];
 			} else {
-				outputValue += node.operands.map(function (id) { return "#" + id }).toString();
+				outputValue += "[";
+				// TODO comparator for IF yet missing in exported data!
+				if (node.name==="IFInst") {
+					outputValue += "#" + node.operands[0] + " " + displayIFCondition(node.condition) + " #" + node.operands[1];			
+				} else {
+					outputValue += node.operands.map(function (id) { return "#" + id }).toString();
+				}
+				outputValue += "]";
 			}
-			outputValue += "]";
-		}
+		}		
 		return outputValue;
 	}
 	
@@ -487,7 +513,7 @@
 				node.title = node.operands.map(function(id) { 
 					var operandNode = nodeMap[id];
 					return getNodeDisplayString(operandNode)}
-				).join(",\n");				
+				).join(",<br/>");				
 			}
 		});
 
@@ -571,9 +597,9 @@
 					improvedLayout: true,
 					hierarchical: {
 						enabled: true,
-						//levelSeparation: 100,
-						nodeSpacing: 150,
-						//treeSpacing: 100,
+						levelSeparation: 200,
+						nodeSpacing: 250,
+						treeSpacing: 200,
 						blockShifting: true,
 						edgeMinimization: true,
 						parentCentralization: true,
