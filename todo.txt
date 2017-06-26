@@ -1,0 +1,6 @@
+// TODO: evaluate => showing edge labels only on hover => https://jsfiddle.net/8xrcbg0k/2/
+		// overlay request => https://github.com/almende/vis/issues/2139/
+		// TODO: select groups of nodes with right mouse => https://github.com/almende/vis/issues/977
+		// TODO: drawing on canvas => http://visjs.org/examples/network/events/renderEvents.html
+		//       convex shape => http://jsfiddle.net/rLf78a6x/8/
+		//       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/  

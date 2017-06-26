@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- saved from url=(0040)file:///C:/development/Projekt/test.html -->
 <html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>Network | Basic usage</title>
+  <title>Visualize</title>
   <script type="text/javascript" src="./lib/js/jquery-3.2.0.min.js"></script>
   <script type="text/javascript" src="./lib/js/jquery.layout.js"></script>  
   <script type="text/javascript" src="./lib/js/vis.js"></script>    
@@ -14,8 +14,13 @@
 
   <style type="text/css">
     #cfgNetwork {
-      width: 1920px;
-      height: 1024px;
+      width: 98%;
+      height: 100%;
+      border: 1px solid lightgray;
+    }
+	#network {
+      width: 98%;
+      height: 100%;
       border: 1px solid lightgray;
     }
 	#signature {
@@ -39,17 +44,28 @@
 </head>
 <body>
 
-<div class="ui-layout-center">
-	Search: <input id="cfgSearch"> 
-	<label for="cfgShowBB">show BB
-		<input type="checkbox" id="cfgShowBB" name="checkbox-showBB" value="checkbox-showBB" onclick="showControlFlow(cfgSelectedPass);" checked />      
-    </label>
-	<div id="cfgStatistics"></div> 
-	<div id="cfgNetwork">
-		<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
-			<canvas width="1920" height="1024" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
-			</canvas>
+<div class="ui-layout-center" id="nestedLayout">
+	<div class="ui-layout-west">
+		Search: <input id="cfgSearch"> 
+		<label for="cfgShowBB">BB
+			<input type="checkbox" id="cfgShowBB" name="checkbox-showBB" value="checkbox-showBB" onclick="showControlFlow(jsonData.passes[cfgSelectedPass]);" checked />      
+		</label>
+		<div id="cfgStatistics"></div> 
+		<div id="cfgNetwork">
+			<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
+				<canvas width="90%" height="90%" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
+				</canvas>
+			</div>
 		</div>
+	</div>
+
+	<div class="ui-layout-center">
+		<div id="network">
+			<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
+				<canvas width="90%" height="90%" style="position: relative; touch-action: none; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
+				</canvas>
+			</div>
+		</div>		
 	</div>
 </div>
 <div class="ui-layout-north">
@@ -68,37 +84,53 @@
 
     /**
      * start chrome with '--allow-file-access-from-files' for loading external local files!
-     */
-	var uiLayoutDefaults = {
-		initClosed: true,   
-		size:	"auto",		
-		north: {
-			size: 		40,	
-			resizable: 	true,
-			slidable:	true,
-			initClosed:	false
-		},
-		west: {
-			size: 		220,	
-			resizable: 	true,
-			slidable:	true,
-			initClosed:	false
-		}
-	};
-	
+     */		
 	var uiLayout; 
 	var jsonData = null;   
 	$(document).ready(function () {
-		$('body').layout(uiLayoutDefaults);
+		var uiLayoutDefaults = {
+			initClosed: true,   
+			size:	"auto",		
+			north: {
+				size: 		40,	
+				resizable: 	true,
+				slidable:	true,
+				initClosed:	false
+			},
+			west: {
+				size: 		220,	
+				resizable: 	true,
+				slidable:	true,
+				initClosed:	false
+			}
+		};
+	
+		$('body').layout(uiLayoutDefaults);		
+		
+		var uiNestedLayoutDefaults = {
+			initClosed: true,   
+			size:	"auto",		
+			north: {
+				size: 		0,			
+				},
+			west: {
+				size: 		660,	
+				resizable: 	true,
+				slidable:	true,
+				initClosed:	false
+			}
+		};
+		$('#nestedLayout').layout(uiNestedLayoutDefaults);
+		
+		// initialize
 		loadLocalJSON(function(response) {
-			jsonData= JSON.parse(response);
-			//preventButtonDefault();
+			jsonData= JSON.parse(response);		
 			initSignature();
 			initPassList();
-			showControlFlow(4);
-		}, "./xyz.json");		
+			showPass(8);
+		}, "./xyz.json");
 	});
-
+	
     // helper method to load local JSON file
     function loadLocalJSON(callback, fileName) {
         var xobj = new XMLHttpRequest();
@@ -111,12 +143,6 @@
         }
         xobj.send(null);
     }
-    
-	function preventButtonDefault() {
-		$( "button, input, a" ).click( function( event ) {
-		  event.preventDefault();
-		});
-	}
 	
 	function initSignature() {	
 		var	className = jsonData.class.replace(/\//g, '.');
@@ -169,11 +195,11 @@
 		if (level > maxLevel) {
 			maxLevel = level;
 		}
-		console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
+		//console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
 		node.level = level;
-		var cfgEdges = findEdges(node, edgeData).filter(isCfgEdge);
-		for (var i=0; i < cfgEdges.length; i++) {
-			var childNode = findNodeById(nodeData, cfgEdges[i].to);
+		var edges = findEdges(node, edgeData);
+		for (var i=0; i < edges.length; i++) {
+			var childNode = findNodeById(nodeData, edges[i].to);
 			setHierarchy(nodeData, edgeData, childNode, level + 1);
 		}
 	}
@@ -195,7 +221,7 @@
 		
 		if (node.operands) {
 			outputValue += "[";
-			// TODO comparator yet missing!
+			// TODO comparator for IF yet missing in exported data!
 			if (node.name==="IFInst") {
 				outputValue += "#" + node.operands[0] + " ? " + "#" + node.operands[1];
 			} else {
@@ -204,6 +230,17 @@
 			outputValue += "]";
 		}
 		return outputValue;
+	}
+	
+	function showPass(passIndex) {	
+		// mark the selected pass
+		cfgSelectedPass = passIndex;
+		$("#passList").children().removeClass("pass-button-active");
+		$("#passButton" + passIndex).addClass("pass-button-active");
+		
+		var pass = jsonData.passes[passIndex];
+		showControlFlow(pass);
+		showNetwork(pass);
 	}
 	
 	var cfgRoot;
@@ -217,25 +254,18 @@
 	var cfgNetwork;
 	var cfgSelectedPass;
 	
-    function showControlFlow(passIndex) {	
-				
-		// mark the selected pass
-		cfgSelectedPass = passIndex;
-		$("#passList").children().removeClass("pass-button-active");
-		$("#passButton" + passIndex).addClass("pass-button-active");
-		
+    function showControlFlow(pass) {			
 		cfgNodeMap = {};			
 		$("#cfgStatistics").text("");
 		
 		// no HIR in this pass
-		if (!jsonData.passes[passIndex].nodes || jsonData.passes[passIndex].nodes.length <= 0) {			
+		if (!pass.nodes || pass.nodes.length <= 0) {			
 			cfgNodes.clear();
 			cfgEdges.clear();					
 			return;
 		}	
 		
-		// print statistics
-		var pass = jsonData.passes[passIndex];
+		// print statistics	
 		$("#cfgStatistics").html(
 			"<b>" + pass.nodes.reduce(function(n, val) {return n + (val.name === "BeginInst");}, 0) + "</b>x BB, " + 
 			"<b>" + pass.nodes.length + "</b>x instructions"
@@ -307,18 +337,12 @@
 		});
 
 		cfgRoot = findRoot(cfgNodeData);
+		maxLevel=0;
 		setHierarchy(cfgNodeData, cfgEdgeData, cfgRoot, 0);
 		// set all other levels to max + 1;
 		cfgNodeData
 			.filter(function (node) {return typeof node.level == 'undefined'})
-			.forEach(function(node) {node.level = maxLevel + 1;});
-
-		// TODO: evaluate => showing edge labels only on hover => https://jsfiddle.net/8xrcbg0k/2/
-		// overlay request => https://github.com/almende/vis/issues/2139/
-		// TODO: select groups of nodes with right mouse => https://github.com/almende/vis/issues/977
-		// TODO: drawing on canvas => http://visjs.org/examples/network/events/renderEvents.html
-		//       convex shape => http://jsfiddle.net/rLf78a6x/8/
-		//       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/   
+			.forEach(function(node) {node.level = maxLevel + 1;});	
 
 		if (!cfgNetwork) {
 			// create a network		
@@ -401,6 +425,114 @@
 		cfgNetwork.stabilize(5000);
 	}
 	
+	var root;
+	var nodeData;
+	var edgeData;
+	var nodes;
+	var edges;
+	var nodeMap;	
+	var data;
+	var options;
+	var network;
+	
+	function showNetwork(pass) {			
+		nodeMap = {};	
+		
+		// no HIR in this pass		
+		if (!pass.nodes || pass.nodes.length <= 0) {			
+			nodes.clear();
+			edges.clear();					
+			return;
+		}
+		
+		// create a deep copy of nodes and edges
+        nodeData = JSON.parse(JSON.stringify(pass.nodes));
+        edgeData = JSON.parse(JSON.stringify(pass.edges));
+		
+		// create map for accessing the nodes over their id
+		$.each(nodeData, function (index, node) {
+			nodeMap[node.id] = node;
+			node.label = getCfgNodeDisplayString(node);		
+			if (node.BB) {
+				node.group = node.BB;
+			}
+		});	
+
+		// format edges
+		$.each(edgeData, function (index, edge) {
+			if (edge.type == 'bb') {
+				edge.dashes = true;
+			// set label true/false for if branches
+			} else if (edge.type == 'cfg' && typeof edge.trueBranch != 'undefined') {
+				edge.label = edge.trueBranch;
+			}
+		});
+		
+		root = findRoot(nodeData);
+		maxLevel=0;
+		setHierarchy(nodeData, edgeData, root, 0);
+		// set all other levels to max + 1;
+		nodeData
+			.filter(function (node) {return typeof node.level == 'undefined'})
+			.forEach(function(node) {node.level = maxLevel + 1;});	
+
+		if (!network) {
+			// create a network		
+		
+			// filter nodes and edges for control flow
+			nodes = new vis.DataSet(nodeData);
+			edges = new vis.DataSet(edgeData);			
+			data = {
+				nodes: nodes,
+				edges: edges,
+			};		
+			options = {
+				nodes: {
+					shape: "box",
+				},
+				edges: {
+					arrows: {
+						to: {
+							enabled: true
+						}
+					},
+					smooth: {
+						enabled: true,
+						type: 'continuous'
+					}
+				},
+				layout: {
+					randomSeed: undefined,
+					improvedLayout: true,
+					hierarchical: {
+						enabled: true,
+						//levelSeparation: 100,
+						nodeSpacing: 150,
+						//treeSpacing: 100,
+						blockShifting: true,
+						edgeMinimization: true,
+						parentCentralization: true,
+						direction: 'UD',        // UD, DU, LR, RL
+						sortMethod: 'directed'   // hubsize, directed
+					}
+				},
+				physics: {
+					enabled: false
+				}
+			}
+		
+			var container = document.getElementById('network');
+			network = new vis.Network(container, data, options);		
+			network.fit();
+		} else {
+			// network already has been drawn
+			edges.clear();			
+			nodes.clear();			
+			edges.add(edgeData);
+			nodes.add(nodeData);			
+		}		
+	}
+
 
         // set the first initial zoom level
         /*network.once('initRedraw', function() {
