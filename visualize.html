@@ -393,7 +393,7 @@
 						edgeMinimization: true,
 						parentCentralization: true,
 						direction: 'UD',        // UD, DU, LR, RL
-						sortMethod: 'directed'   // hubsize, directed
+						sortMethod: 'hubsize'   // hubsize, directed
 					}
 				},
 				physics: {
@@ -478,8 +478,18 @@
 			node.label = getNodeDisplayString(node);		
 			if (node.BB) {
 				node.group = node.BB;
-			}
+			}			
 		});	
+		
+		// create tooltips 
+		$.each(nodeData, function (index, node) {
+			if (node.operands) {
+				node.title = node.operands.map(function(id) { 
+					var operandNode = nodeMap[id];
+					return getNodeDisplayString(operandNode)}
+				).join(",\n");				
+			}
+		});
 
 		// format edges
 		$.each(edgeData, function (index, edge) {
