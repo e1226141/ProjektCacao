@@ -55,6 +55,9 @@
 		<label for="cfgShowBB">BB
 			<input type="checkbox" id="cfgShowBB" name="checkbox-showBB" value="checkbox-showBB" onclick="showControlFlow(jsonData.passes[cfgSelectedPass]);" checked />      
 		</label>
+		<label for="cfgShowEdgeLabel">edge Labels
+			<input type="checkbox" id="cfgShowEdgeLabel" name="checkbox-showEdgeLabel" value="checkbox-cfgShowEdgeLabel" onclick="showControlFlow(jsonData.passes[cfgSelectedPass]);" checked />      
+		</label>
 		<div id="cfgStatistics"></div>
 		<div id="cfgNetwork">
 			<div class="vis-network" tabindex="900" style="position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-drag: none; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); width: 100%; height: 100%;">
@@ -236,8 +239,7 @@
 			default: return "?";
 		}
 	}
-	
-	
+		
 	function getNodeDisplayString(node, simpleDisplay) {
 		var outputValue = ""; 
 		
@@ -298,6 +300,43 @@
 	var cfgNetwork;
 	var cfgSelectedPass;
 	
+	function getNodeBackgroundColor(node) {
+		switch (node.name) {
+			case "IFInst": return "#A1EC76";
+			case "RETURNInst": return "#FFA807";
+			
+			//AD85E4
+			//FDBFC9
+			//FFFF00
+			//C2FABC
+			//FFCA66
+			default: return "#97C2FC";
+		}
+	};
+	
+	function getEdgeColor(edge) {
+		switch (edge.type) {
+			case "cfg": 
+				if (typeof edge.trueBranch != 'undefined') {
+					// if gets different colors
+					if (edge.trueBranch) {
+						return "#5aa52b";
+					} else {
+						return "#7C29F0";
+					}
+				}					
+				// normal control flow
+				return "#87B2EC";
+			case "op": return "#C2FABC";
+			case "sched": return "#FFCA66";
+			default: return "#000000";
+		}
+	};
+	
+	function countInstruction(nodes, nodeName) {
+		return nodes.reduce(function(n, val) {return n + (val.name === nodeName);}, 0)
+	}
+	
     function showControlFlow(pass) {			
 		cfgNodeMap = {};			
 		$("#cfgStatistics").text("");
@@ -311,7 +350,7 @@
 		
 		// print statistics	
 		$("#cfgStatistics").html(
-			"<b>" + pass.nodes.reduce(function(n, val) {return n + (val.name === "BeginInst");}, 0) + "</b>x BB"
+			"<b>" + countInstruction(pass.nodes, "BeginInst") + "</b>x BB"
 		);	
 		
         // create an array with nodes
@@ -329,6 +368,7 @@
 			if (node.BB) {
 				node.group = node.BB;
 			}
+			node.color = getNodeBackgroundColor(node);
 		});
 		
 		// create a map for accessing edges by the key "edge.from"
@@ -338,7 +378,7 @@
 			if (list === undefined) {
 				list = [];
 				cfgEdgeMap[edge.from] = list;
-			}
+			}			
 			list.push(edge);
 		});
 
@@ -346,10 +386,11 @@
 		if ($('#cfgShowBB').prop('checked')) {	
 				
 			cfgNodeData = cfgNodeData.filter(function (node) { return node.name === "BeginInst";});
-			$.each(cfgNodeData, function (index, beginInst) {
+			$.each(cfgNodeData, function (index, beginInst) {				
+			
 				// BeginInst and EndInst have a 1:1 relationship
 				var bbEdge = cfgEdgeMap[beginInst.id][0];
-				var endInst = cfgNodeMap[bbEdge.to];
+				var endInst = cfgNodeMap[bbEdge.to];							
 				
 				// adjust the label
 				beginInst.label = "BB #" + beginInst.id + " => #" + endInst.id;
@@ -364,19 +405,36 @@
 						edge.from = beginInst.id;
 					}
 				}
+				
+				// color is based on the endInst
+				beginInst.color = getNodeBackgroundColor(endInst);
+				beginInst.endInstLink = endInst.id;
 			});
 			
 			cfgEdgeData = cfgEdgeData.filter(function (edge) { return edge.type !== 'bb';});				
 		}
 
 		// format edges
+		var showEdgeLabels = $('#cfgShowEdgeLabel').prop('checked');
 		$.each(cfgEdgeData, function (index, edge) {
 			if (edge.type == 'bb') {
 				edge.dashes = true;
 			// set label true/false for if branches
 			} else if (edge.type == 'cfg' && typeof edge.trueBranch != 'undefined') {
-				edge.label = edge.trueBranch;
+				if (showEdgeLabels) {
+					edge.label = edge.trueBranch ? "T" : "F";				
+				}
+				
+				// print IF condition as tooltip
+				var sourceNode = cfgNodeMap[edge.from];
+				if (typeof sourceNode.endInstLink != 'undefined') {
+					sourceNode = cfgNodeMap[sourceNode.endInstLink];
+				}
+				edge.title = getNodeDisplayString(sourceNode, true) + " is " + edge.trueBranch;
+				
 			}
+			edge.color = getEdgeColor(edge);
+			edge.width = 2;			
 		});
 
 		cfgRoot = findRoot(cfgNodeData);
@@ -409,7 +467,7 @@
 					},
 					smooth: {
 						enabled: true,
-						type: 'continuous'
+						type: 'discrete'
 					}
 				},
 				layout: {
@@ -417,8 +475,8 @@
 					improvedLayout: true,
 					hierarchical: {
 						enabled: true,
-						levelSeparation: 60,
-						nodeSpacing: 150,
+						levelSeparation: 80,
+						nodeSpacing: 180,
 						//treeSpacing: 100,
 						blockShifting: true,
 						edgeMinimization: true,
@@ -472,7 +530,7 @@
 			.appendTo( ul );
 		};
 		
-		cfgNetwork.stabilize(5000);
+		//cfgNetwork.stabilize();
 	}
 	
 	var root;
