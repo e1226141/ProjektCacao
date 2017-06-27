@@ -225,14 +225,18 @@
 	
 	function markBackedges(nodeMap, edgeMap, node, visitedNodes) {
 		var edges = edgeMap[node.id];		
-		if (edges) {
+		if (edges) {			
 			visitedNodes[node.id] = true;
 			for (var i=0; i < edges.length; i++) {
-				var childId = edges[i].to;
+				var edge = edges[i];
+				if (edge.type === "op") {
+					continue;
+				}
+				var childId = edge.to;
 				if (visitedNodes[childId]) {
-					edges[i].backedge=true;
+					edge.backedge=true;
 				} else {
-					var childNode = nodeMap[edges[i].to];			
+					var childNode = nodeMap[edge.to];			
 					markBackedges(nodeMap, edgeMap, childNode, visitedNodes);
 				}
 				visitedNodes[node.id] = false;
@@ -327,7 +331,7 @@
 			case "GOTOInst": if (!showBB) {
 								return "#C7E2FC";			
 							} return "#97C2FC";
-							
+			case "PHIInst": return "#FFCA66";				
 			
 			//AD85E4
 			//FDBFC9
@@ -354,8 +358,8 @@
 				}					
 				// normal control flow
 				return "#87B2EC";
-			case "op": return "#C2FABC";
-			case "sched": return "#FFCA66";
+			case "op": return "#AD85E4";
+			case "sched": return "#FDBFC9";
 			default: return "#000000";
 		}
 	};
@@ -598,6 +602,7 @@
 			if (node.BB) {
 				node.group = node.BB;
 			}			
+			node.color = getNodeBackgroundColor(node);
 		});	
 		
 		// create tooltips 
@@ -607,16 +612,6 @@
 					var operandNode = nodeMap[id];
 					return getNodeDisplayString(operandNode)}
 				).join(",<br/>");				
-			}
-		});
-
-		// format edges
-		$.each(edgeData, function (index, edge) {
-			if (edge.type == 'bb') {
-				edge.dashes = true;
-			// set label true/false for if branches
-			} else if (edge.type == 'cfg' && typeof edge.trueBranch != 'undefined') {
-				edge.label = edge.trueBranch;
 			}
 		});
 		
@@ -631,7 +626,22 @@
 			list.push(edge);
 		});
 		
+		// mark all backedges to color them differently
 		root = findRoot(nodeData);
+		markBackedges(nodeMap, edgeMap, root, {});
+		
+		// format edges
+		$.each(edgeData, function (index, edge) {
+			if (edge.type == 'bb') {
+				edge.dashes = true;
+			// set label true/false for if branches
+			} else if (edge.type == 'cfg' && typeof edge.trueBranch != 'undefined') {
+				edge.label = edge.trueBranch;
+			}
+			edge.color = getEdgeColor(edge);
+			edge.width = 2;			
+		});
+				
 		maxLevel=0;
 		setHierarchy(nodeMap, edgeMap, root, 0);
 		// set all other levels to max + 1;
