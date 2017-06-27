@@ -3,4 +3,15 @@
 		// TODO: select groups of nodes with right mouse => https://github.com/almende/vis/issues/977
 		// TODO: drawing on canvas => http://visjs.org/examples/network/events/renderEvents.html
 		//       convex shape => http://jsfiddle.net/rLf78a6x/8/
-		//       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/  
+		//       gray out non selected nodes / edges => http://jsfiddle.net/bokm6ymy/
+		
+		
+Feedback: CACAO meeting
+	Typescript instead of JS?
+	Electron (desktop app)
+	
+	should be possible to write specific features for a pass
+	should also display generated machine code
+	should include life time ranges from register allocation
+	
+		
