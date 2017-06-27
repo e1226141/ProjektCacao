@@ -208,17 +208,23 @@
 			maxLevel = level;
 		}
 		//console.log("set node.level to " + level + " for id: " + node.id + " and type " + node.name);
-		node.level = level;
-		
-		// todo use map instead of edges.filter...
-		var edges = edgeMap[node.id];
-		if (edges) {
-			for (var i=0; i < edges.length; i++) {
-				var childNode = nodeMap[edges[i].to];
-				setHierarchy(nodeMap, edgeMap, childNode, level + 1);
+		if (typeof node.level == 'undefined' || node.level > level) {		
+			node.level = level;
+			
+			// todo use map instead of edges.filter...
+			var edges = edgeMap[node.id];
+			if (edges) {
+				for (var i=0; i < edges.length; i++) {
+					var childNode = nodeMap[edges[i].to];
+					setHierarchy(nodeMap, edgeMap, childNode, level + 1);
+				}
 			}
-		}
-	}	
+		}		
+	}
+	
+	function markBackedges(nodeMap, edgeMap, node, visitedNodes) {
+		
+	}
 
 	function isCfgNode(node) {
 		return $.inArray(node.name, ["BeginInst", "GOTOInst", "RETURNInst", "IFInst"]) != -1;
@@ -300,10 +306,14 @@
 	var cfgNetwork;
 	var cfgSelectedPass;
 	
-	function getNodeBackgroundColor(node) {
+	function getNodeBackgroundColor(node, showBB) {
 		switch (node.name) {
 			case "IFInst": return "#A1EC76";
 			case "RETURNInst": return "#FFA807";
+			case "GOTOInst": if (!showBB) {
+								return "#C7E2FC";			
+							} return "#97C2FC";
+							
 			
 			//AD85E4
 			//FDBFC9
@@ -317,6 +327,9 @@
 	function getEdgeColor(edge) {
 		switch (edge.type) {
 			case "cfg": 
+				if (edge.backedge) {
+					return "#FF6000";
+				}
 				if (typeof edge.trueBranch != 'undefined') {
 					// if gets different colors
 					if (edge.trueBranch) {
@@ -362,13 +375,14 @@
 		cfgEdgeData =  JSON.parse(JSON.stringify(cfgEdgeData));
 		
 		// create map for accessing the nodes over their id
+		var showBB = $('#cfgShowBB').prop('checked');
 		$.each(cfgNodeData, function (index, node) {
 			cfgNodeMap[node.id] = node;
 			node.label = getNodeDisplayString(node);		
 			if (node.BB) {
 				node.group = node.BB;
 			}
-			node.color = getNodeBackgroundColor(node);
+			node.color = getNodeBackgroundColor(node, showBB);
 		});
 		
 		// create a map for accessing edges by the key "edge.from"
@@ -381,9 +395,9 @@
 			}			
 			list.push(edge);
 		});
-
+		
 		// collapse BasicBlocks to a single block
-		if ($('#cfgShowBB').prop('checked')) {	
+		if (showBB) {	
 				
 			cfgNodeData = cfgNodeData.filter(function (node) { return node.name === "BeginInst";});
 			$.each(cfgNodeData, function (index, beginInst) {				
@@ -407,12 +421,16 @@
 				}
 				
 				// color is based on the endInst
-				beginInst.color = getNodeBackgroundColor(endInst);
+				beginInst.color = getNodeBackgroundColor(endInst, showBB);
 				beginInst.endInstLink = endInst.id;
 			});
 			
-			cfgEdgeData = cfgEdgeData.filter(function (edge) { return edge.type !== 'bb';});				
+			cfgEdgeData = cfgEdgeData.filter(function (edge) { return edge.type !== 'bb';});							
 		}
+				
+		// mark all backedges to color them differently
+		cfgRoot = findRoot(cfgNodeData);
+		markBackedges(cfgNodeMap, cfgEdgeMap, cfgRoot, {});
 
 		// format edges
 		var showEdgeLabels = $('#cfgShowEdgeLabel').prop('checked');
@@ -430,14 +448,12 @@
 				if (typeof sourceNode.endInstLink != 'undefined') {
 					sourceNode = cfgNodeMap[sourceNode.endInstLink];
 				}
-				edge.title = getNodeDisplayString(sourceNode, true) + " is " + edge.trueBranch;
-				
-			}
+				edge.title = getNodeDisplayString(sourceNode, true) + " is " + edge.trueBranch;				
+			}			
 			edge.color = getEdgeColor(edge);
 			edge.width = 2;			
 		});
-
-		cfgRoot = findRoot(cfgNodeData);
+	
 		maxLevel=0;
 		setHierarchy(cfgNodeMap, cfgEdgeMap, cfgRoot, 0);
 		// set all other levels to max + 1;
