@@ -3,9 +3,9 @@
 <html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <title>Visualize</title>
   <script type="text/javascript" src="./lib/js/jquery-3.2.0.min.js"></script>
-  <script type="text/javascript" src="./lib/js/jquery.layout.js"></script>  
-  <script type="text/javascript" src="./lib/js/vis.js"></script>    
   <script type="text/javascript" src="./lib/js/jquery-ui.min.js"></script>
+  <script type="text/javascript" src="./lib/js/jquery.layout.js"></script>  
+  <script type="text/javascript" src="./lib/js/vis.js"></script>      
   <link rel="stylesheet" type="text/css" href="./lib/css/vis.css">
   <link rel="stylesheet" type="text/css" href="./lib/css/layout-default-latest.css">
   <link rel="stylesheet" type="text/css" href="./lib/css/jquery-ui.min.css">
@@ -87,8 +87,8 @@
 	Passes:<div id="passList"></div>
 </div>
 
-<div class="ui-layout-south"></div>
-<div class="ui-layout-east"></div>
+<!--<div class="ui-layout-south"></div>
+<div class="ui-layout-east"></div>-->
 
 </body>
 
@@ -123,7 +123,8 @@
 			initClosed: true,   
 			size:	"auto",		
 			north: {
-				size: 		0,			
+				size: 		0,
+				resizable: true
 				},
 			west: {
 				size: 		660,	
@@ -223,7 +224,20 @@
 	}
 	
 	function markBackedges(nodeMap, edgeMap, node, visitedNodes) {
-		
+		var edges = edgeMap[node.id];		
+		if (edges) {
+			visitedNodes[node.id] = true;
+			for (var i=0; i < edges.length; i++) {
+				var childId = edges[i].to;
+				if (visitedNodes[childId]) {
+					edges[i].backedge=true;
+				} else {
+					var childNode = nodeMap[edges[i].to];			
+					markBackedges(nodeMap, edgeMap, childNode, visitedNodes);
+				}
+				visitedNodes[node.id] = false;
+			}			
+		}
 	}
 
 	function isCfgNode(node) {
@@ -328,7 +342,7 @@
 		switch (edge.type) {
 			case "cfg": 
 				if (edge.backedge) {
-					return "#FF6000";
+					return "#EE0000";
 				}
 				if (typeof edge.trueBranch != 'undefined') {
 					// if gets different colors
